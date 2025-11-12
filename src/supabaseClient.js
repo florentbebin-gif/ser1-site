@@ -16,3 +16,9 @@ export const supabase = createClient(supabaseUrl, supabaseAnon, {
     autoRefreshToken: true,
   },
 })
+export const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY);
+
+// AJOUT POUR DEBUG UNIQUEMENT (peut rester, c'est inoffensif)
+if (typeof window !== 'undefined') {
+  window.supabase = supabase;
+}
