@@ -2,14 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient.js'
 import { useParamsGlobal } from '../context/ParamsProvider.jsx'
 import { toNumber } from '../utils/number.js'
-import useUserRole from '../utils/useUserRole.js' // <-- ajout du hook
-const { role, loading: roleLoading, user } = useUserRole()
-<div className="chip" style={{marginBottom:12}}>
-  <span>Rôle actuel : </span>
-  <strong style={{marginLeft:6}}>{roleLoading ? 'Chargement…' : (role ?? '—')}</strong>
-  <span style={{marginLeft:10, opacity:.7}}>user:</span>
-  <strong style={{marginLeft:6}}>{user?.email ?? '—'}</strong>
-</div>
+import useUserRole from '../utils/useUserRole.js' // doit retourner { role, loading, user }
 
 function SimpleTableView({ data }) {
   if (!data) return null
@@ -114,6 +107,7 @@ function EditableTable({ data, onChange }) {
 
 export default function Params() {
   const { params: globalParams, loading: gLoading, error: gError, reload } = useParamsGlobal()
+
   const [form, setForm] = useState({
     irVersion: '2025',
     defaultLoanRate: 4.0,
@@ -127,11 +121,10 @@ export default function Params() {
   const [error, setError] = useState('')
   const [okMsg, setOkMsg] = useState('')
 
-  // 🔥 Nouveau : rôle utilisateur via le hook
-  const { role, loading: roleLoading } = useUserRole()
+  // rôle + user via le hook (getSession)
+  const { role, loading: roleLoading, user } = useUserRole()
   const isAdmin = useMemo(() => role?.toLowerCase() === 'admin', [role])
 
-  // Initialisation du formulaire avec les valeurs globales
   useEffect(() => {
     if (globalParams) {
       setForm(prev => ({ ...prev, ...globalParams, tables: (globalParams.tables || {}) }))
@@ -190,10 +183,15 @@ export default function Params() {
     <div className="panel">
       <div className="plac-title">Paramètres globaux</div>
 
+      {/* Mini-badge debug rôle + email */}
       <div className="chip" style={{ marginBottom: 12 }}>
         <span>Rôle actuel :</span>
         <strong style={{ marginLeft: 6 }}>
-          {roleLoading ? 'Chargement…' : role || 'user'}
+          {roleLoading ? 'Chargement…' : (role ?? '—')}
+        </strong>
+        <span style={{ marginLeft: 10, opacity: .7 }}>user :</span>
+        <strong style={{ marginLeft: 6 }}>
+          {user?.email ?? '—'}
         </strong>
       </div>
 
@@ -261,8 +259,7 @@ export default function Params() {
               </div>
             </div>
 
-            {/* Autres tables inchangées */}
-            {/* ... */}
+            {/* … autres tables identiques à ton implémentation */}
           </div>
         </div>
 
