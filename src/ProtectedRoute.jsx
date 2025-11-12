@@ -1,66 +1,75 @@
 // src/components/ProtectedRoute.jsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { getMyProfile } from '../utils/profile';
 
 /**
- * Usage inchangé :
- *   <ProtectedRoute><MaPage/></ProtectedRoute>
+ * Usage classique :
+ *   <ProtectedRoute><Page/></ProtectedRoute>
  *
- * Restriction admin possible (optionnelle) :
+ * Admin seulement :
  *   <ProtectedRoute requiredRole="admin"><Admin/></ProtectedRoute>
  */
 export default function ProtectedRoute({ children, requiredRole }) {
   const location = useLocation();
-  const [state, setState] = useState({
-    loading: true,
-    authenticated: false,
-    roleOk: true, // true par défaut pour ne rien casser quand requiredRole n'est pas fourni
-  });
+
+  const [loading, setLoading] = useState(true);
+  const [authenticated, setAuthenticated] = useState(false);
+  const [roleOk, setRoleOk] = useState(true); // true par défaut si pas de rôle requis
+  const firstHandled = useRef(false);
 
   useEffect(() => {
-    let alive = true;
+    // filet de sécu : si rien ne vient (extensions, etc.), on sort du loading
+    const timeout = setTimeout(() => {
+      if (!firstHandled.current) {
+        setLoading(false);
+        setAuthenticated(false);
+        setRoleOk(false);
+      }
+    }, 4000);
 
-    (async () => {
-      // 1) Session utilisateur ?
-      const { data: { session }, error: sessionErr } = await supabase.auth.getSession();
-      if (sessionErr || !session) {
-        if (alive) setState({ loading: false, authenticated: false, roleOk: false });
+    const { data: sub } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      // appelé immédiatement avec INITIAL_SESSION, puis à chaque login/logout
+      if (firstHandled.current && !_event) return; // micro protection
+      firstHandled.current = true;
+
+      const user = session?.user ?? null;
+      if (!user) {
+        setAuthenticated(false);
+        setRoleOk(false);
+        setLoading(false);
         return;
       }
 
-      // 2) Si aucun rôle requis -> OK
+      // connecté
+      setAuthenticated(true);
+
       if (!requiredRole) {
-        if (alive) setState({ loading: false, authenticated: true, roleOk: true });
+        setRoleOk(true);
+        setLoading(false);
         return;
       }
 
-      // 3) Rôle requis -> on lit le profil
-      const profile = await getMyProfile();
-      const ok = profile?.role === requiredRole;
+      // rôle requis → lire le profil
+      try {
+        const profile = await getMyProfile(); // lit public.profiles(id=auth.uid())
+        setRoleOk((profile?.role || '').toLowerCase() === requiredRole.toLowerCase());
+      } catch {
+        setRoleOk(false);
+      } finally {
+        setLoading(false);
+      }
+    });
 
-      if (alive) setState({ loading: false, authenticated: true, roleOk: ok });
-    })();
-
-    return () => { alive = false; };
+    return () => {
+      clearTimeout(timeout);
+      sub?.subscription?.unsubscribe?.();
+    };
   }, [requiredRole]);
 
-  // État "chargement"
-  if (state.loading) {
-    return <div style={{ padding: 24 }}>Chargement…</div>;
-  }
-
-  // Non connecté -> renvoi vers login, on garde la destination
-  if (!state.authenticated) {
-    return <Navigate to="/login" replace state={{ from: location }} />;
-  }
-
-  // Connecté mais rôle insuffisant
-  if (!state.roleOk) {
-    return <div style={{ padding: 24 }}>Accès réservé à {requiredRole}.</div>;
-  }
-
-  // OK
+  if (loading) return <div style={{ padding: 24 }}>Chargement…</div>;
+  if (!authenticated) return <Navigate to="/login" replace state={{ from: location }} />;
+  if (!roleOk) return <div style={{ padding: 24 }}>Accès réservé à {requiredRole ?? 'membres connectés'}.</div>;
   return children;
 }
