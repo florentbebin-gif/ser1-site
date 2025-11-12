@@ -3,6 +3,13 @@ import { supabase } from '../supabaseClient.js'
 import { useParamsGlobal } from '../context/ParamsProvider.jsx'
 import { toNumber } from '../utils/number.js'
 import useUserRole from '../utils/useUserRole.js' // <-- ajout du hook
+const { role, loading: roleLoading, user } = useUserRole()
+<div className="chip" style={{marginBottom:12}}>
+  <span>Rôle actuel : </span>
+  <strong style={{marginLeft:6}}>{roleLoading ? 'Chargement…' : (role ?? '—')}</strong>
+  <span style={{marginLeft:10, opacity:.7}}>user:</span>
+  <strong style={{marginLeft:6}}>{user?.email ?? '—'}</strong>
+</div>
 
 function SimpleTableView({ data }) {
   if (!data) return null
