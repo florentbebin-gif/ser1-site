@@ -1,39 +1,66 @@
-import React, { useEffect, useState } from "react";
-import { supabase } from "./supabaseClient";
-import { useNavigate } from "react-router-dom";
+// src/components/ProtectedRoute.jsx
+import React, { useEffect, useState } from 'react';
+import { Navigate, useLocation } from 'react-router-dom';
+import { supabase } from '../supabaseClient';
+import { getMyProfile } from '../utils/profile';
 
-export default function ProtectedRoute({ children }) {
-  const [checked, setChecked] = useState(false);
-  const [session, setSession] = useState(null);
-  const navigate = useNavigate();
+/**
+ * Usage inchangé :
+ *   <ProtectedRoute><MaPage/></ProtectedRoute>
+ *
+ * Restriction admin possible (optionnelle) :
+ *   <ProtectedRoute requiredRole="admin"><Admin/></ProtectedRoute>
+ */
+export default function ProtectedRoute({ children, requiredRole }) {
+  const location = useLocation();
+  const [state, setState] = useState({
+    loading: true,
+    authenticated: false,
+    roleOk: true, // true par défaut pour ne rien casser quand requiredRole n'est pas fourni
+  });
 
   useEffect(() => {
-    let mounted = true;
+    let alive = true;
 
     (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!mounted) return;
-      setSession(session);
-      setChecked(true);
-      if (!session) navigate("/login", { replace: true });
+      // 1) Session utilisateur ?
+      const { data: { session }, error: sessionErr } = await supabase.auth.getSession();
+      if (sessionErr || !session) {
+        if (alive) setState({ loading: false, authenticated: false, roleOk: false });
+        return;
+      }
+
+      // 2) Si aucun rôle requis -> OK
+      if (!requiredRole) {
+        if (alive) setState({ loading: false, authenticated: true, roleOk: true });
+        return;
+      }
+
+      // 3) Rôle requis -> on lit le profil
+      const profile = await getMyProfile();
+      const ok = profile?.role === requiredRole;
+
+      if (alive) setState({ loading: false, authenticated: true, roleOk: ok });
     })();
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
-      if (!mounted) return;
-      setSession(s);
-    });
+    return () => { alive = false; };
+  }, [requiredRole]);
 
-    return () => {
-      sub?.subscription?.unsubscribe?.();
-      mounted = false;
-    };
-  }, [navigate]);
-
-  if (!checked) {
-    return <div style={{ padding: 24 }}>Initialisation…</div>;
+  // État "chargement"
+  if (state.loading) {
+    return <div style={{ padding: 24 }}>Chargement…</div>;
   }
 
-  if (!session) return null;
+  // Non connecté -> renvoi vers login, on garde la destination
+  if (!state.authenticated) {
+    return <Navigate to="/login" replace state={{ from: location }} />;
+  }
 
+  // Connecté mais rôle insuffisant
+  if (!state.roleOk) {
+    return <div style={{ padding: 24 }}>Accès réservé à {requiredRole}.</div>;
+  }
+
+  // OK
   return children;
 }
